@@ -1,10 +1,40 @@
 import tempfile, unittest, shutil
 from pathlib import Path
 from unittest.mock import patch
-from PIL import Image
+from PIL import Image, ImageFont, ImageDraw
+import numpy as np
 import processor as p
 
 class Tests(unittest.TestCase):
+    def test_vietnamese_signature_glyph(self):
+        font=ImageFont.truetype(str(p.SIGNATURE_FONT),80)
+        glyph=font.getmask('ị')
+        missing=font.getmask('\uffff')
+        self.assertNotEqual((glyph.size,bytes(glyph)),(missing.size,bytes(missing)))
+        self.assertNotEqual(bytes(glyph),bytes(font.getmask('i')))
+
+    def test_translucent_logo_and_bright_distraction(self):
+        for size in (256,512,1024):
+            base=Image.new('RGB',(size,size),(92,72,41))
+            d=ImageDraw.Draw(base)
+            # Bright river-like object distracts the former connected-component detector.
+            d.rectangle((int(size*.85),int(size*.86),int(size*.88),int(size*.9)),fill=(230,230,230))
+            star=Image.new('L',base.size)
+            sd=ImageDraw.Draw(star)
+            cx=cy=round(size*.9)
+            r=round(size*.024)
+            k=max(1,round(r*.3))
+            sd.polygon([(cx,cy-r),(cx+k,cy-k),(cx+r,cy),(cx+k,cy+k),
+                        (cx,cy+r),(cx-k,cy+k),(cx-r,cy),(cx-k,cy-k)],fill=255)
+            # Low-opacity star never reaches the old brightness threshold.
+            logo=Image.composite(Image.new('RGB',base.size,(130,122,106)),base,star)
+            mask,_=p.logo_mask(logo)
+            self.assertTrue(np.all(mask[np.array(star)>0]==255))
+            result,_=p.clean_logo(logo)
+            without_logo,_=p.clean_logo(base)
+            # Restored pixels must not depend on any part of the hidden star.
+            self.assertTrue(np.array_equal(np.array(result),np.array(without_logo)))
+
     def test_sizes_and_metadata(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as td:
             for size in [(32,32),(800,400),(400,800),(1024,1024)]:

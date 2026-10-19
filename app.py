@@ -7,7 +7,7 @@ from processor import collect, process, load_settings, save_settings
 class App:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title('Thanh Vị • Xử lý ảnh')
+        self.root.title('Thanh Vị 1.0.1 • Xử lý ảnh')
         self.root.geometry('850x620')
         self.root.minsize(700,500)
         self.root.configure(bg='#f5f3ef')

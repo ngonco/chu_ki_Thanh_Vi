@@ -11,6 +11,7 @@
 | `ThanhVi.spec` | Đóng gói app và thư viện vào `dist/ThanhVi.exe` |
 | `test_processor.py` | Kiểm tra xử lý, tên trùng, metadata, kích thước, độ hiện, cài đặt và giữ nguồn khi lỗi |
 | `test_drop.py` | Gửi thông điệp kéo thả Windows vào cửa sổ thật; xử lý ảnh tạm, kiểm tra đầu ra |
+| `verify_release.py` | Giải nén mã và phông từ `.exe`, đối chiếu asset và chạy lại regression trên module đóng gói |
 | `AGENTS.md` | Quy tắc sửa, kiểm tra, push main và phát hành `.exe` |
 
 ## Luồng dữ liệu
@@ -29,8 +30,9 @@
 - Cài đặt: `%APPDATA%/ThanhViImage/settings.json`; `load_settings()` dùng mặc định nếu dữ liệu lỗi. `App.changed()` lưu khi chỉnh; lỗi ghi không làm app dừng.
 - `collect(paths) -> list[Path]` nhận tệp hoặc thư mục.
 - `process(source, settings) -> (Path, str)` trả đường dẫn và trạng thái; ném exception khi xử lý/lưu thất bại.
-- `clean_logo(image) -> (Image, bool)` tìm vùng sáng ít bão hoà trong góc 82–97%, lọc connected component theo kích thước, rồi OpenCV Telea inpaint. Nếu không thấy, luôn xử lý hình vuông tại (90% rộng, 90% cao), bán kính 2.9% cạnh ngắn.
-- `sign(image, opacity, size) -> RGBA Image` dùng `C:/Windows/Fonts/segoesc.ttf`. Phông thiếu “ị”, nên vẽ “Thanh Vi” và chấm dưới chữ i để tạo chữ ký đủ dấu. Đặt trắng ở góc phải dưới, lề 2.5% cạnh ngắn.
+- `logo_mask(image) -> (mask, bool)` luôn phủ hình vuông tại (90% rộng, 90% cao), bán kính 3.4% cạnh ngắn, để xoá cả nét logo bán trong suốt. Component sáng gần tâm chỉ có thể mở rộng mask, không bao giờ thu hẹp mask mặc định.
+- `clean_logo(image) -> (Image, bool)` xoá toàn bộ mask bằng Telea; chọn miếng nền nguyên vẹn lân cận theo sai số tại viền và ghép Poisson để giữ chi tiết. Loại các miếng nền chứa vùng logo khỏi lựa chọn. Ảnh nhỏ/không đủ nền dùng Telea.
+- `sign(image, opacity, size) -> RGBA Image` dùng phông Dancing Script đóng kèm tại `assets/fonts/DancingScript.ttf` (giấy phép OFL cùng thư mục). Vẽ trực tiếp Unicode “Thanh Vị” ở độ phân giải 4x rồi thu nhỏ; không ghép dấu thủ công và không phụ thuộc phông Windows. Đặt trắng ở góc phải dưới, lề 2.5% cạnh ngắn. `SIGNATURE_FONT` dùng `sys._MEIPASS` trong bản `.exe`.
 - PNG → JPG quality 95, subsampling 0, nền trắng; đầu vào khác → PNG. Giữ kích thước sau khi áp dụng hướng EXIF. Không giữ ICC; ảnh profile đặc biệt có thể đổi màu.
 - Không hỗ trợ ảnh động/TIFF nhiều trang. Không cam kết loại SynthID hoặc mọi dấu hiệu AI.
 
@@ -40,3 +42,4 @@
 - Cài đặt mới: thêm mặc định và đọc/kiểm tra trong `load_settings()`, widget trong `App`, đưa vào bản sao settings của worker; cập nhật tài liệu và kiểm tra lưu/đọc.
 - Nguồn đầu vào mới: chuẩn hoá về danh sách đường dẫn, gọi `App.start()`. Giữ mọi thao tác Tkinter trên luồng chính.
 - Phát hành: chạy kiểm tra → đóng gói → thử `.exe` → commit/push main → tạo tag/release tăng phiên bản với asset `ThanhVi.exe`. Thay đổi chỉ tài liệu không cần build mới.
+- Luôn dùng `--clean` khi build. Chạy `python verify_release.py` trước khi phát hành để kiểm tra mã `processor` và asset phông trong `.exe`, tránh phát hành nhầm bytecode cũ. Phiên bản hiện tại: 1.0.1 (hiện trên tiêu đề cửa sổ).

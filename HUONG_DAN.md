@@ -12,10 +12,10 @@ Mở `ThanhVi.exe`, thả ảnh hoặc thư mục vào cửa sổ. Có thể dù
 
 ## Mã nguồn
 
-Python 3.11; phụ thuộc Pillow, numpy, opencv-python, PyInstaller. Dùng phông Segoe Script có sẵn trên Windows.
+Python 3.11; phụ thuộc Pillow, numpy, opencv-python, PyInstaller. Đóng kèm phông Dancing Script hỗ trợ tiếng Việt, giấy phép OFL trong `assets/fonts/OFL.txt`.
 
 Chạy: `python app.py`
 
 Kiểm tra: `python -m unittest test_processor.py`
 
-Đóng gói: `python -m PyInstaller --noconfirm --clean --onefile --windowed --name ThanhVi --exclude-module gradio --exclude-module matplotlib --exclude-module scipy --exclude-module pandas app.py`
+Đóng gói (bao gồm phông chữ): `python -m PyInstaller --noconfirm --clean ThanhVi.spec`

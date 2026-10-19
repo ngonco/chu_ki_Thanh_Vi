@@ -25,3 +25,11 @@ Hỗ trợ PNG, JPG/JPEG, WebP, BMP, TIFF tĩnh; duyệt thư mục con. [Hướ
 - Đóng gói: `python -m PyInstaller --noconfirm --clean ThanhVi.spec`
 
 File phát hành nằm tại `dist/ThanhVi.exe`. Không đưa ảnh cá nhân hoặc thư mục build vào Git.
+
+## Bản 1.0.1
+
+- Sửa bỏ sót nét logo mờ trên nền có nhiều chi tiết; phục hồi bằng miếng nền lân cận.
+- Đóng kèm phông viết tay hỗ trợ đầy đủ “Thanh Vị”, sửa lỗi ký tự vuông ở chữ “ị”.
+- Build sạch và kiểm tra mã, phông bên trong `.exe` trước khi phát hành.
+
+Phông Dancing Script sử dụng theo [giấy phép OFL](assets/fonts/OFL.txt).
