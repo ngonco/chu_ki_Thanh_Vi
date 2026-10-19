@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+preview/
+test_work/
+tmp*/
+vendor/
+*.zip
+.venv/
+.tools/
+*.log
