@@ -86,6 +86,6 @@ class Tests(unittest.TestCase):
             self.assertFalse(p.load_settings()['delete'])
             value={'opacity':55,'size':4.2,'delete':True}
             p.save_settings(value)
-            self.assertEqual(p.load_settings(),value)
+            self.assertEqual(p.load_settings(),{**p.DEFAULTS,**value})
 
 if __name__=='__main__': unittest.main()

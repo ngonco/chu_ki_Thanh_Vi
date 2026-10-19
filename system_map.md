@@ -1,45 +1,57 @@
-# Bản đồ hệ thống Thanh Vị
+# Bản đồ hệ thống Thanh Vị 1.1.0
 
-## Điểm bắt đầu và kiến trúc
+## Kiến trúc và điểm bắt đầu
 
-Ứng dụng Windows Python 3.11, giao diện Tkinter; đóng gói một file bằng PyInstaller. Không dùng máy chủ, API hoặc mạng khi chạy.
+Ứng dụng Windows Python 3.11, PySide6 Essentials (Qt Core/GUI/Widgets), xử lý Pillow/NumPy/OpenCV. Chạy offline, PyInstaller đóng gói một `.exe`. Giao diện trước 1.1.0 dùng Tkinter; mã hook WM_DROPFILES đã được thay bằng Qt.
 
-| Thành phần | Trách nhiệm |
+| Thành phần | Vai trò |
 |---|---|
-| `app.py` / `App` | Giao diện tiếng Việt, nhận tệp/thư mục, thanh cài đặt, tiến độ, worker và hàng đợi sự kiện |
-| `processor.py` | Thu thập ảnh, xoá logo, chữ ký, chuyển định dạng, lưu an toàn, cài đặt |
-| `ThanhVi.spec` | Đóng gói app và thư viện vào `dist/ThanhVi.exe` |
-| `test_processor.py` | Kiểm tra xử lý, tên trùng, metadata, kích thước, độ hiện, cài đặt và giữ nguồn khi lỗi |
-| `test_drop.py` | Gửi thông điệp kéo thả Windows vào cửa sổ thật; xử lý ảnh tạm, kiểm tra đầu ra |
-| `verify_release.py` | Giải nén mã và phông từ `.exe`, đối chiếu asset và chạy lại regression trên module đóng gói |
-| `AGENTS.md` | Quy tắc sửa, kiểm tra, push main và phát hành `.exe` |
+| `app.py` / `App` | Hai chế độ, danh sách ảnh, cài đặt, xem trước, worker, lưu và kéo tệp ra ngoài |
+| `app.py` / `Canvas` | QGraphicsView, toạ độ ảnh gốc, mặt nạ cọ liên tục, zoom/pan và lớp tô đỏ |
+| `app.py` / `DragTile` | Ô kéo riêng, phát sinh QDrag/QMimeData chứa URL tệp cục bộ |
+| `editor.py` / `EditorDocument` | Pixel ảnh chỉnh tay, ảnh ban đầu, lịch sử patch tối đa 20 bước, revision và đường dẫn đầu ra |
+| `processor.py` | Thu thập/đọc ảnh, phục hồi mặt nạ, logo, chữ ký và lưu an toàn |
+| `ThanhVi.spec` | Đóng gói Qt, font Dancing Script, giấy phép và app thành `dist/ThanhVi.exe` |
+| `test_processor.py`, `test_editor.py` | Hồi quy logo/font/metadata/lưu, mặt nạ/alpha, lịch sử và xuất ảnh |
+| `test_drop.py` | Qt events kiểm tra đầu vào, cọ ở nhiều mức zoom, pan, lưu, hỏi chưa lưu và MIME đầu ra |
+| `verify_release.py` | Lấy module processor/editor và font từ EXE, chạy hồi quy trực tiếp trên mã đóng gói |
 
-## Luồng dữ liệu
+## Luồng xử lý
 
-1. Chọn ảnh/thư mục hoặc Windows gửi `WM_DROPFILES` vào cửa sổ. Callback native chỉ đẩy đường dẫn vào queue; không gọi Tkinter trong callback vì có thể gây crash do GIL/reentrancy.
-2. `App.poll()` nhận sự kiện `drop`; `App.start()` chụp bản sao cài đặt và chạy worker nền. Trong lúc bận, lượt mới bị từ chối bằng thông báo.
-3. `collect(paths)` duyệt thư mục con, lọc phần mở rộng, loại trùng đường dẫn và bỏ tên kết thúc `_ThanhVi` hoặc `_ThanhVi_<số>`.
-4. `process(source, settings)` mở ảnh tĩnh, áp dụng EXIF orientation, chuyển RGBA → `clean_logo()` → `sign()`.
-5. Tạo ảnh từ pixel sạch để loại metadata; ghi tệp tạm cạnh nguồn, mở đọc kiểm tra kích thước, rename sang tên chưa tồn tại. Trên Windows rename không ghi đè tệp đích.
-6. Chỉ sau khi đầu ra thành công mới xoá nguồn nếu `delete=True`. Lỗi xoá nguồn được trả về trong trạng thái; lỗi xử lý giữ nguồn. Tệp tạm được dọn trong `finally`.
-7. Worker đưa tiến độ/kết quả vào queue. Chỉ luồng giao diện cập nhật widget. Không đóng app khi đang xử lý.
+**Tự động:** Qt nhận local URLs → `collect()` (duyệt thư mục, bỏ hậu tố `_ThanhVi`) → worker xử lý từng ảnh qua `process()` → lưu kết quả và báo tiến độ. Chế độ này luôn xoá logo/ký tên, không phụ thuộc hai tick của chế độ chỉnh tay.
 
-## Giao diện nội bộ và quy tắc
+**Chỉnh tay:** `collect(include_outputs=True)` cho mở cả ảnh kết quả cũ → `EditorDocument` giữ original và image RGBA riêng → Canvas ánh xạ chuột qua `mapToScene` thành mặt nạ đúng kích thước ảnh → nhả chuột phát `stroke` → worker `heal_region()` → commit patch và cập nhật preview. Ngoài mask, pixel và alpha không thay đổi.
 
-- `settings`: dict `opacity` (0–100, mặc định 80), `size` (% cạnh ngắn, 1–10, mặc định 3.5), `delete` (bool, mặc định False).
-- Cài đặt: `%APPDATA%/ThanhViImage/settings.json`; `load_settings()` dùng mặc định nếu dữ liệu lỗi. `App.changed()` lưu khi chỉnh; lỗi ghi không làm app dừng.
-- `collect(paths) -> list[Path]` nhận tệp hoặc thư mục.
-- `process(source, settings) -> (Path, str)` trả đường dẫn và trạng thái; ném exception khi xử lý/lưu thất bại.
-- `logo_mask(image) -> (mask, bool)` luôn phủ hình vuông tại (90% rộng, 90% cao), bán kính 3.4% cạnh ngắn, để xoá cả nét logo bán trong suốt. Component sáng gần tâm chỉ có thể mở rộng mask, không bao giờ thu hẹp mask mặc định.
-- `clean_logo(image) -> (Image, bool)` xoá toàn bộ mask bằng Telea; chọn miếng nền nguyên vẹn lân cận theo sai số tại viền và ghép Poisson để giữ chi tiết. Loại các miếng nền chứa vùng logo khỏi lựa chọn. Ảnh nhỏ/không đủ nền dùng Telea.
-- `sign(image, opacity, size) -> RGBA Image` dùng phông Dancing Script đóng kèm tại `assets/fonts/DancingScript.ttf` (giấy phép OFL cùng thư mục). Vẽ trực tiếp Unicode “Thanh Vị” ở độ phân giải 4x rồi thu nhỏ; không ghép dấu thủ công và không phụ thuộc phông Windows. Đặt trắng ở góc phải dưới, lề 2.5% cạnh ngắn. `SIGNATURE_FONT` dùng `sys._MEIPASS` trong bản `.exe`.
-- PNG → JPG quality 95, subsampling 0, nền trắng; đầu vào khác → PNG. Giữ kích thước sau khi áp dụng hướng EXIF. Không giữ ICC; ảnh profile đặc biệt có thể đổi màu.
-- Không hỗ trợ ảnh động/TIFF nhiều trang. Không cam kết loại SynthID hoặc mọi dấu hiệu AI.
+**Preview/xuất:** `render_image()` sao chép pixel chỉnh tay → xoá logo nếu bật → chữ ký nếu bật. Hiệu ứng không được ghi ngược vào pixel chỉnh tay. Cache preview gắn revision; khi lưu chỉ dùng cache nếu revision còn đúng. Đổi hiệu ứng tăng revision và cập nhật preview sau debounce.
 
-## Thêm chức năng
+**Lưu:** lần đầu sinh tên mới cạnh nguồn; các lần sau cập nhật đúng output của document. Save As chọn tệp khác và hỏi nếu trùng. `save_image()` ghi tệp tạm cùng thư mục → mở đọc kiểm tra → rename/replace nguyên tử → mới xoá nguồn nếu được bật. Không cho đích trùng nguồn. Lỗi không xoá nguồn và không đánh dấu document đã lưu.
 
-- Xử lý ảnh mới: đặt thuật toán trong `processor.py`, nối vào `process()`, kiểm tra đầu vào/đầu ra và quy tắc giữ nguồn khi lỗi.
-- Cài đặt mới: thêm mặc định và đọc/kiểm tra trong `load_settings()`, widget trong `App`, đưa vào bản sao settings của worker; cập nhật tài liệu và kiểm tra lưu/đọc.
-- Nguồn đầu vào mới: chuẩn hoá về danh sách đường dẫn, gọi `App.start()`. Giữ mọi thao tác Tkinter trên luồng chính.
-- Phát hành: chạy kiểm tra → đóng gói → thử `.exe` → commit/push main → tạo tag/release tăng phiên bản với asset `ThanhVi.exe`. Thay đổi chỉ tài liệu không cần build mới.
-- Luôn dùng `--clean` khi build. Chạy `python verify_release.py` trước khi phát hành để kiểm tra mã `processor` và asset phông trong `.exe`, tránh phát hành nhầm bytecode cũ. Phiên bản hiện tại: 1.0.1 (hiện trên tiêu đề cửa sổ).
+**Kéo ra web:** DragTile → lưu mới nhất bằng worker → chờ kết quả trong Qt event loop → `QDrag` với `QMimeData.setUrls([QUrl.fromLocalFile(...)])`, chỉ CopyAction. Lưu lỗi không kéo. Huỷ kéo vẫn giữ tệp đã lưu. Không dùng tệp ảo/ảnh clipboard. Người dùng tự kiểm tra Chrome thật; kiểm tra tự động bao phủ tệp và MIME.
+
+## Trạng thái và ràng buộc
+
+- `EditorDocument` chỉ giữ một ảnh đang mở; chuyển ảnh/đóng app khi dirty hỏi Lưu/Bỏ thay đổi/Huỷ. Không lưu bản nháp vào nguồn.
+- Mỗi nét lưu bbox, patch trước và sau; undo/redo tối đa 20 bước, nét mới xoá redo. Khôi phục về original và xoá lịch sử.
+- `QThreadPool(maxThreadCount=1)` chạy Job; QObject signals đưa kết quả về GUI. Trong lúc bận khoá chỉnh/lưu/kéo và không cho đóng. Worker lỗi không commit nét cọ. Không gọi widget từ worker.
+- Canvas dùng pixel ảnh gốc cho đường kính cọ 1–300. Lăn chuột zoom 2%–3200%, Space + kéo pan; không dùng cọ để kéo tệp.
+- Cài đặt ở `%APPDATA%/ThanhViImage/settings.json`: opacity=80, size=3.5 (% cạnh ngắn), delete=False, mode='auto', brush=24, remove_logo=True, signature=True. Đọc được cấu hình 1.0.x và bổ sung mặc định cho trường mới.
+- PNG → JPG quality 95/subsampling 0, nền trắng; ảnh khác → PNG. Save As hỗ trợ PNG/JPG. Tệp mới bỏ metadata thông thường/ICC. Giữ kích thước sau áp dụng EXIF orientation. Không hỗ trợ ảnh động/TIFF nhiều trang.
+
+## Giao diện nội bộ và mở rộng
+
+- `read_image(source) -> RGBA Image`; `collect(paths, include_outputs=False) -> list[Path]`.
+- `heal_region(image, mask) -> Image`: mask 2D cùng kích thước; trống thì copy, phủ toàn ảnh thì báo lỗi. Telea + tìm miếng nền lân cận theo viền, ghép Poisson; cuối cùng chỉ lấy pixel trong mask. Copy mask trước gọi OpenCV vì seamlessClone có thể thay đổi mặt nạ truyền vào.
+- `logo_mask(image) -> (mask, detected)`: luôn phủ vùng quanh (90% rộng, 90% cao), bán kính 3.4% cạnh ngắn; component sáng chỉ mở rộng mask. `clean_logo()` dùng hàm heal chung.
+- `sign(image, opacity, size) -> RGBA Image`: Dancing Script Unicode “Thanh Vị”, vẽ 4x rồi thu nhỏ. Font từ assets hoặc `sys._MEIPASS` khi đóng gói; không phụ thuộc font Windows.
+- `render_image(image, settings) -> Image`: hiệu ứng không tích luỹ. `save_image(image, source, settings, target=None, overwrite=False) -> (Path, status)` chỉ lưu pixel đã render. `process()` ghép read/render/save cho tự động.
+- Thêm công cụ ảnh: tạo hàm thuần trong processor; worker xử lý snapshot, commit patch khi thành công. Giữ thứ tự lớp hiệu ứng và ánh xạ tọa độ gốc. Thêm cài đặt thì cập nhật DEFAULTS/load_settings/App và kiểm tra migration.
+
+## Kiểm tra và phát hành
+
+Tạo/kích hoạt `.venv`, `pip install -r requirements.txt`. Chạy `python -m unittest test_processor.py test_editor.py test_drop.py`. Qt tests dùng nền offscreen và chỉ ảnh thử, không tác động ảnh cá nhân/cài đặt thật.
+
+Build sạch `python -m PyInstaller --noconfirm --clean ThanhVi.spec`, rồi `python verify_release.py`. Có thể chạy `dist/ThanhVi.exe --smoke-test <marker.json>` để mở/đóng GUI và thử xử lý ảnh tổng hợp trong bản đóng gói. Không dùng lại bytecode cũ.
+
+Qt 6.12 dùng API ICU của Windows. Spec phải loại `icuuc.dll` riêng khỏi gói: dependency scanner có thể lấy nhầm ICU của Poppler trên PATH, gây lỗi “DLL load failed / specified procedure could not be found” khi import QtCore. Windows 10/11 cung cấp DLL hệ thống phù hợp. Chế độ smoke ghi traceback vào `<marker>.error.txt` nếu khởi động lỗi.
+
+Cập nhật tài liệu/phiên bản, commit và push main, tạo GitHub Release tăng phiên bản với asset `ThanhVi.exe`, kiểm tra link latest đầu README. Chi tiết quy tắc ở `AGENTS.md`; giấy phép và cách thay thư viện Qt ở `THIRD_PARTY_NOTICES.md`.

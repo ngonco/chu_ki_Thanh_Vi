@@ -2,3 +2,4 @@ Pillow==12.1.1
 numpy==2.4.4
 opencv-python==4.13.0.92
 PyInstaller==6.14.2
+PySide6-Essentials==6.12.0

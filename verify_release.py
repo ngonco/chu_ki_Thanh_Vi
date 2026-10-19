@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 from PyInstaller.archive.readers import CArchiveReader
 import test_processor
+import test_editor
 
 
 def verify(exe='dist/ThanhVi.exe'):
@@ -26,15 +27,26 @@ def verify(exe='dist/ThanhVi.exe'):
         frozen.__file__ = str(root/'processor.py')
         with patch.object(sys,'_MEIPASS',str(root),create=True):
             exec(code,frozen.__dict__)
+        frozen_editor=types.ModuleType('editor_frozen')
+        frozen_editor.__file__=str(root/'editor.py')
+        with patch.dict(sys.modules,{'processor':frozen}):
+            exec(archive.open_embedded_archive('PYZ.pyz').extract('editor'),frozen_editor.__dict__)
         assert 'logo_mask' in frozen.clean_logo.__code__.co_names, 'Outdated processor in EXE'
         assert 'Thanh Vị' in frozen.sign.__code__.co_consts, 'Outdated signature in EXE'
         assert 'SIGNATURE_FONT' in frozen.sign.__code__.co_names, 'Bundled font is not used'
-        with patch.object(test_processor,'p',frozen):
-            suite=unittest.defaultTestLoader.loadTestsFromModule(test_processor)
+        assert 'heal_region' in frozen.clean_logo.__code__.co_names, 'Missing shared healing function'
+        with patch.object(test_processor,'p',frozen), patch.object(test_editor,'p',frozen), \
+                patch.object(test_editor,'EditorDocument',frozen_editor.EditorDocument):
+            suite=unittest.TestSuite([unittest.defaultTestLoader.loadTestsFromModule(test_processor),
+                                     unittest.defaultTestLoader.loadTestsFromModule(test_editor)])
             result=unittest.TextTestRunner(verbosity=1).run(suite)
             if not result.wasSuccessful():
                 raise SystemExit(1)
-    print('EXE code, bundled font and regressions verified')
+    assert 'editor' in archive.open_embedded_archive('PYZ.pyz').toc, 'Missing editor in EXE'
+    assert any('QtWidgets' in key for key in entries), 'Missing Qt UI'
+    assert 'assets/licenses/LGPL-3.0.txt' in entries, 'Missing Qt license'
+    assert 'icuuc.dll' not in {key.lower() for key in entries}, 'Incompatible private ICU may override Windows ICU'
+    print('EXE code, healing tool, Qt UI, bundled font and regressions verified')
 
 
 if __name__ == '__main__':

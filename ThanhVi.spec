@@ -1,19 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import PureWindowsPath
 
 
 a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets/fonts/DancingScript.ttf', 'assets/fonts'), ('assets/fonts/OFL.txt', 'assets/fonts')],
+    datas=[('assets/fonts/DancingScript.ttf', 'assets/fonts'), ('assets/fonts/OFL.txt', 'assets/fonts'),
+           ('assets/licenses', 'assets/licenses'), ('THIRD_PARTY_NOTICES.md', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['gradio', 'matplotlib', 'scipy', 'pandas'],
+    excludes=['gradio', 'matplotlib', 'scipy', 'pandas', 'tkinter', 'PyQt5', 'PyQt6', 'PySide2'],
     noarchive=False,
     optimize=0,
 )
+# Qt on Windows uses the OS ICU API (unsuffixed exports). A Poppler install on
+# PATH can fool dependency scanning into collecting its incompatible icuuc.dll.
+# Leave this Windows system library to the OS loader, as in an unpackaged run.
+a.binaries = [entry for entry in a.binaries
+              if PureWindowsPath(entry[0]).name.lower() != 'icuuc.dll']
 pyz = PYZ(a.pure)
 
 exe = EXE(
